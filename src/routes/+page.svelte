@@ -1,19 +1,13 @@
 <script lang="ts">
-	import { goto, onNavigate } from '$app/navigation';
-	import { get_games, isGames, type Game } from '$lib';
+	import { goto } from '$app/navigation';
+	import { get_games, isGames, localStore, TriState, type Game } from '$lib';
 	import ImageCard from '$lib/ImageCard.svelte';
 	import { mdiApi, mdiFilter, mdiLoading, mdiSort } from '@mdi/js';
 	import { convertFileSrc } from '@tauri-apps/api/core';
 	import { fetch } from '@tauri-apps/plugin-http';
-	import { Button, Dialog, Drawer, Icon, TextField } from 'svelte-ux';
+	import { Button, Checkbox, Dialog, Drawer, Icon, SelectField, TextField } from 'svelte-ux';
 	import { API_TOKEN, State, type SGDB_SearchResult } from './data.svelte';
-
-	const TriState = {
-		include: 'include',
-		exclude: 'exclude',
-		ignore: 'ignore'
-	} as const;
-
+	import ThreeStateSwitch from '$lib/ThreeStateSwitch.svelte';
 	let games: Game[] = $state([]);
 	get_games().then((ret) => {
 		if (!isGames(ret)) return;
@@ -21,36 +15,37 @@
 		games = ret;
 	});
 	let drawer = $state('');
-	const filterBy = $state({
+	const filterBy = localStore('filterBy', {
 		search: '',
-		has_custom_banner: TriState.ignore,
-		has_custom_coverart_big: TriState.ignore
+		has_custom_banner: TriState.Ignore,
+		has_custom_coverart_big: TriState.Ignore
 	});
 
 	let open = $state(false);
 	let open2 = $state(false);
 
-	const sortBy = $state({
-		asc: true,
+	const sortBy = localStore('sortBy', {
+		asc: false,
 		by: 'installed_at' as 'installed_at' | 'lastplayed' | 'playtime'
 	});
 
 	let filteredGames = $derived.by(() => {
 		return games.filter((game) => {
 			let tru = true;
-			if (filterBy.search) {
-				tru = game.game.name.toLowerCase().includes(filterBy.search.toLowerCase());
+			if (filterBy.value.search) {
+				tru = game.game.name.toLowerCase().includes(filterBy.value.search.toLowerCase());
 			}
-			if (filterBy.has_custom_banner !== TriState.ignore) {
+			if (filterBy.value.has_custom_banner !== TriState.Ignore) {
 				tru =
 					tru &&
-					(game.game.has_custom_banner === 1) === (filterBy.has_custom_banner === TriState.include);
+					(game.game.has_custom_banner === 1) ===
+						(filterBy.value.has_custom_banner === TriState.Include);
 			}
-			if (filterBy.has_custom_coverart_big !== TriState.ignore) {
+			if (filterBy.value.has_custom_coverart_big !== TriState.Ignore) {
 				tru =
 					tru &&
 					(game.game.has_custom_coverart_big === 1) ===
-						(filterBy.has_custom_coverart_big === TriState.include);
+						(filterBy.value.has_custom_coverart_big === TriState.Include);
 			}
 
 			return tru;
@@ -59,8 +54,9 @@
 
 	let sortedGames = $derived.by(() => {
 		return filteredGames.toSorted((a, b) => {
-			if (sortBy.asc) return (a.game[sortBy.by] ?? Infinity) - (b.game[sortBy.by] ?? Infinity);
-			return (b.game[sortBy.by] ?? Infinity) - (a.game[sortBy.by] ?? Infinity);
+			if (sortBy.value.asc)
+				return (a.game[sortBy.value.by] ?? Infinity) - (b.game[sortBy.value.by] ?? Infinity);
+			return (b.game[sortBy.value.by] ?? Infinity) - (a.game[sortBy.value.by] ?? Infinity);
 		});
 	});
 
@@ -109,7 +105,15 @@
 		<Drawer open={drawer === 'sort'} placement="right" class="w-[400px] pt-16">
 			<div class="p-4">
 				<h2 class="text-xl">Sorts</h2>
-				<p>TODO: Sorts</p>
+				<Checkbox bind:checked={sortBy.value.asc}>Asc</Checkbox>
+				<SelectField
+					options={[
+						{ label: 'Installed at', value: 'installed_at' },
+						{ label: 'Last played', value: 'lastplayed' },
+						{ label: 'Playtime', value: 'playtime' }
+					]}
+					bind:value={sortBy.value.by}
+				/>
 			</div>
 			<div slot="actions">
 				<Button onclick={() => (drawer = drawer === 'sort' ? '' : 'sort')}>Close</Button>
@@ -124,7 +128,24 @@
 		<Drawer open={drawer === 'filter'} placement="right" class="w-[400px] pt-16">
 			<div class="p-4">
 				<h2 class="text-xl">Filters</h2>
-				<p>TODO: Filters</p>
+				<TextField
+					label="Search"
+					on:change={(e) => {
+						filterBy.value.search = e.detail.value as unknown as string;
+					}}
+				/>
+				<label
+					class="flex w-full select-none items-center gap-2 rounded-lg p-2 text-sm hover:bg-surface-200/50"
+				>
+					<ThreeStateSwitch bind:State={filterBy.value.has_custom_banner}></ThreeStateSwitch>
+					has custom banner
+				</label>
+				<label
+					class="flex w-full select-none items-center gap-2 rounded-lg p-2 text-sm hover:bg-surface-200/50"
+				>
+					<ThreeStateSwitch bind:State={filterBy.value.has_custom_coverart_big}></ThreeStateSwitch>
+					has custom cover
+				</label>
 			</div>
 			<div slot="actions">
 				<Button onclick={() => (drawer = drawer === 'filter' ? '' : 'filter')}>Close</Button>
@@ -144,7 +165,7 @@
 		{State.dialogData?.game.name}
 		{State.coverOrBanner === 'cover' ? 'Cover' : 'Banner'}
 	</div>
-	<div class="max-h-[calc(100vh-8rem)] overflow-auto">
+	<div class="max-h-[calc(100vh-12rem)] overflow-auto">
 		{#if State.dialogData}
 			{#await get_games_SGDB(State.dialogData.game.name)}
 				Loading data from SGDB<Icon data={mdiLoading} class="animate-spin" />
@@ -173,7 +194,7 @@
 <Dialog bind:open class="mt-16">
 	<div slot="title">{State.dialogData?.game.name}</div>
 	{#if State.dialogData}
-		<div class="flex h-[calc(100vh-8rem)] flex-col flex-nowrap items-center">
+		<div class="flex h-[calc(100vh-12rem)] flex-col flex-nowrap items-center">
 			<button
 				onclick={() => {
 					open2 = true;

@@ -43,14 +43,13 @@ struct GameWithArt {
 impl TryFrom<Game> for GameWithArt {
     type Error = String;
     fn try_from(game: Game) -> Result<Self, Self::Error> {
-        println!("{}", game.name);
         let binding = home_dir().unwrap_or(std::path::PathBuf::new());
         let homedir = binding.display();
         let coverart_path = format!("{}/.local/share/lutris/coverart/", homedir);
         let banner_path = format!("{}/.local/share/lutris/banners/", homedir);
         let coverart_path = match extension_from_path(&coverart_path, &game.slug) {
             Ok(Some(value)) => value,
-            Ok(None) => "".to_string(),
+            Ok(None) => format!("{}{}.png", coverart_path, game.slug),
             Err(value) => {
                 println!("{}", value);
                 return Err(value);
@@ -66,7 +65,7 @@ impl TryFrom<Game> for GameWithArt {
         };
         let banner_path = match extension_from_path(&banner_path, &game.slug) {
             Ok(Some(value)) => value,
-            Ok(None) => "".to_string(),
+            Ok(None) => format!("{}{}.png", banner_path, game.slug),
             Err(value) => {
                 println!("{}", value);
                 return Err(value);
@@ -164,10 +163,6 @@ fn get_games() -> Result<Vec<GameWithArt>, String> {
         }
     };
     let games: Vec<GameWithArt> = games
-        .map(|g| {
-            dbg!(&g);
-            g
-        })
         .filter_map(Result::ok)
         .filter_map(|g| g.try_into().ok())
         .collect();

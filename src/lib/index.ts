@@ -44,3 +44,11 @@ export const screens = {
 	'2xl': '1536px',
 	'3xl': '2000px'
 };
+
+export * from './localstore.svelte';
+
+export const TriState = {
+	Include: 'Include',
+	Exclude: 'Exclude',
+	Ignore: 'Ignore'
+} as const;
